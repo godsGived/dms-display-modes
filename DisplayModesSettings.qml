@@ -23,12 +23,21 @@ PluginSettings {
         wrapMode: Text.WordWrap
     }
 
+    ToggleSetting {
+        id: manageShortcut
+        settingKey: "manageShortcut"
+        label: I18n.trFor("displayModes", "Register a picker shortcut")
+        description: I18n.trFor("displayModes", "Add a DMS-managed keyboard shortcut for the picker. Off by default. Turning it off removes the binding.")
+        defaultValue: false
+    }
+
     StringSetting {
+        visible: manageShortcut.value
         settingKey: "shortcut"
         label: I18n.trFor("displayModes", "Picker shortcut")
-        description: I18n.trFor("displayModes", "DMS-managed shortcut for the display picker, for example Mod+P. Leave empty to remove it. An existing shortcut is never replaced.")
+        description: I18n.trFor("displayModes", "For example Mod+P. An existing shortcut is never replaced; conflicts are reported instead.")
         placeholder: "Mod+P"
-        defaultValue: "Mod+P"
+        defaultValue: ""
     }
 
     ToggleSetting {

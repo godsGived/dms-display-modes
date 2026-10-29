@@ -13,7 +13,33 @@ PluginComponent {
     readonly property string scriptPath: Qt.resolvedUrl("scripts/display-modes").toString().replace("file://", "")
     readonly property bool showBarLabel: pluginData.showBarLabel ?? true
 
-    property string currentMode: "unknown"
+    property string currentMode: "off"
+
+    function updateMode() {
+        const outs = WlrOutputService.outputs || [];
+        const active = [];
+        for (const output of outs) {
+            if (output.enabled)
+                active.push(output.name);
+        }
+        if (active.length >= 2)
+            currentMode = "extend";
+        else if (active.length === 1)
+            currentMode = /^(eDP|LVDS|DSI)/i.test(active[0]) ? "internal" : "external";
+        else
+            currentMode = "off";
+    }
+
+    Component.onCompleted: updateMode()
+
+    Connections {
+        target: WlrOutputService
+
+        function onStateChanged() {
+            root.updateMode();
+        }
+    }
+
     property bool busy: false
     property string pendingMode: ""
 
@@ -56,11 +82,6 @@ PluginComponent {
         }
     }
 
-    function refresh() {
-        if (!statusProcess.running)
-            statusProcess.running = true;
-    }
-
     function applyMode(mode) {
         if (busy)
             return;
@@ -97,7 +118,7 @@ PluginComponent {
     ccWidgetIcon: modeIcon(currentMode)
     ccWidgetPrimaryText: I18n.trFor("displayModes", "Display mode")
     ccWidgetSecondaryText: modeLabel(currentMode)
-    ccWidgetIsActive: currentMode !== "unknown" && currentMode !== "off"
+    ccWidgetIsActive: currentMode !== "off"
     ccWidgetIsToggle: false
     ccExpandedMinimumHeight: Theme.listItemHeight
     ccDetailHeight: Theme.listItemHeight * 3 + Theme.groupedListGap * 2
@@ -191,34 +212,6 @@ PluginComponent {
         }
     }
 
-    Component.onCompleted: refresh()
-
-    onInteractionActiveChanged: {
-        if (interactionActive)
-            refresh();
-    }
-
-    Timer {
-        interval: 5000
-        repeat: true
-        running: root.surfaceLive
-        onTriggered: root.refresh()
-    }
-
-    Process {
-        id: statusProcess
-
-        command: [root.scriptPath, "current"]
-
-        stdout: StdioCollector {
-            onStreamFinished: {
-                const value = text.trim();
-                if (value.length > 0)
-                    root.currentMode = value;
-            }
-        }
-    }
-
     Process {
         id: actionProcess
 
@@ -233,9 +226,7 @@ PluginComponent {
         onExited: exitCode => {
             root.busy = false;
             if (exitCode === 0) {
-                root.currentMode = root.pendingMode;
                 ToastService.showInfo(I18n.trFor("displayModes", "Display mode"), root.modeLabel(root.pendingMode));
-                root.refresh();
             } else {
                 const details = actionStderr.text.trim();
                 ToastService.showError(I18n.trFor("displayModes", "Could not switch display mode"), details || I18n.trFor("displayModes", "The display backend returned an error."));

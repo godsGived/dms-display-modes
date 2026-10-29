@@ -11,13 +11,14 @@ PluginComponent {
     readonly property string scriptPath: Qt.resolvedUrl("scripts/display-modes").toString().replace("file://", "")
     readonly property string keybindScriptPath: Qt.resolvedUrl("scripts/displaymodes-keybind").toString().replace("file://", "")
 
-    property string appliedShortcut: ""
+    property string appliedShortcut: "__unset__"
     property string pendingShortcut: ""
     property string runningShortcut: ""
     property bool firstSync: true
 
     function syncKeybind() {
-        const shortcut = String(pluginData.shortcut ?? "Mod+P").trim();
+        const enabled = pluginData.manageShortcut === true;
+        const shortcut = enabled ? String(pluginData.shortcut ?? "").trim() : "";
         if (shortcut === appliedShortcut && !keybindProcess.running)
             return;
 
@@ -35,6 +36,8 @@ PluginComponent {
     }
 
     Component.onCompleted: Qt.callLater(syncKeybind)
+
+    onPluginDataChanged: Qt.callLater(syncKeybind)
 
     Connections {
         target: pluginService

@@ -56,8 +56,14 @@
   "Picker shortcut": {
     "Picker shortcut": "Комбинация для меню"
   },
-  "DMS-managed shortcut for the display picker, for example Mod+P. Leave empty to remove it. An existing shortcut is never replaced.": {
-    "DMS-managed shortcut for the display picker, for example Mod+P. Leave empty to remove it. An existing shortcut is never replaced.": "Комбинация DMS для меню выбора мониторов, например Mod+P. Оставьте пустой, чтобы удалить. Уже занятая комбинация не заменяется."
+  "Register a picker shortcut": {
+    "Register a picker shortcut": "Назначить комбинацию для меню"
+  },
+  "Add a DMS-managed keyboard shortcut for the picker. Off by default. Turning it off removes the binding.": {
+    "Add a DMS-managed keyboard shortcut for the picker. Off by default. Turning it off removes the binding.": "Добавить комбинацию DMS для меню выбора мониторов. По умолчанию выключено. При отключении комбинация удаляется."
+  },
+  "For example Mod+P. An existing shortcut is never replaced; conflicts are reported instead.": {
+    "For example Mod+P. An existing shortcut is never replaced; conflicts are reported instead.": "Например Mod+P. Уже занятая комбинация не заменяется — плагин сообщит о конфликте."
   },
   "Show mode name in the bar": {
     "Show mode name in the bar": "Показывать режим в панели"

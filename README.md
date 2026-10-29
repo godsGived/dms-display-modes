@@ -15,10 +15,13 @@ exactly where they were.
   monitor only, or every connected monitor.
 - **Remembers the extended layout** — position, mode, scale, transform and
   refresh rate.
-- **Win+P shortcut** — a DMS-managed `Mod+P` binding, configurable or removable
-  in the plugin settings. An existing binding is never overwritten.
+- **Optional Win+P shortcut** — enable a DMS-managed shortcut (for example
+  `Mod+P`) in the plugin settings. It is off by default, an existing binding is
+  never overwritten, and turning it off removes the binding.
 - **Control Center tile and bar widget** — shows the current mode and switches
   with one click.
+- **Live state without polling** — the widget follows DMS's output state and
+  updates on output events.
 - **Launcher integration** — type `mon` in the launcher.
 - **IPC** — `dms ipc call displayModes internal|external|extend|cycle|menu`.
 - **English and Russian UI**, plus a localized picker that follows the session
@@ -57,7 +60,7 @@ to the Control Center from the same settings page.
 
 | Action | How |
 | --- | --- |
-| Open the picker | `Mod+P` (configurable) |
+| Open the picker | Enable the shortcut in settings (for example `Mod+P`) |
 | Control Center | Add the **Display Modes** tile |
 | Bar | Add the widget and click it |
 | Launcher | Type `mon` |
@@ -91,9 +94,11 @@ before finishing.
 
 ## Settings
 
-- **Picker shortcut** — default `Mod+P`; leave it empty to remove the binding.
-  If the key is already used by another action, the plugin reports the conflict
-  instead of replacing it.
+- **Register a picker shortcut** — off by default. Enable it and enter a
+  combination such as `Mod+P`; turn it off to remove the binding. If the key is
+  already used by another action, the plugin reports the conflict instead of
+  replacing it.
+- **Picker shortcut** — the combination used by the toggle above.
 - **Show mode name in the bar** — hides the text label and keeps only the icon.
 
 ## Limitations
