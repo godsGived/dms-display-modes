@@ -1,0 +1,83 @@
+{
+  "Display Modes": {
+    "Display Modes": "Режимы мониторов"
+  },
+  "Display mode": {
+    "Display mode": "Режим мониторов"
+  },
+  "Laptop only": {
+    "Laptop only": "Только ноутбук"
+  },
+  "External only": {
+    "External only": "Только внешний"
+  },
+  "Extended": {
+    "Extended": "Расширенный"
+  },
+  "Unknown": {
+    "Unknown": "Неизвестно"
+  },
+  "Laptop": {
+    "Laptop": "Ноутбук"
+  },
+  "External": {
+    "External": "Внешний"
+  },
+  "Display": {
+    "Display": "Экран"
+  },
+  "Choose which displays to use.": {
+    "Choose which displays to use.": "Выберите, какие экраны использовать."
+  },
+  "Could not switch display mode": {
+    "Could not switch display mode": "Не удалось переключить режим"
+  },
+  "The display backend returned an error.": {
+    "The display backend returned an error.": "Система вернула ошибку."
+  },
+  "Shortcut updated": {
+    "Shortcut updated": "Комбинация обновлена"
+  },
+  "Could not register the shortcut": {
+    "Could not register the shortcut": "Не удалось назначить комбинацию"
+  },
+  "Choose another shortcut in the plugin settings.": {
+    "Choose another shortcut in the plugin settings.": "Выберите другую комбинацию в настройках плагина."
+  },
+  "Use the built-in display only": {
+    "Use the built-in display only": "Оставить только встроенный экран"
+  },
+  "Use an external monitor only": {
+    "Use an external monitor only": "Оставить только внешний монитор"
+  },
+  "Extend the desktop across every connected monitor": {
+    "Extend the desktop across every connected monitor": "Расширить рабочий стол на все подключённые мониторы"
+  },
+  "Picker shortcut": {
+    "Picker shortcut": "Комбинация для меню"
+  },
+  "DMS-managed shortcut for the display picker, for example Mod+P. Leave empty to remove it. An existing shortcut is never replaced.": {
+    "DMS-managed shortcut for the display picker, for example Mod+P. Leave empty to remove it. An existing shortcut is never replaced.": "Комбинация DMS для меню выбора мониторов, например Mod+P. Оставьте пустой, чтобы удалить. Уже занятая комбинация не заменяется."
+  },
+  "Show mode name in the bar": {
+    "Show mode name in the bar": "Показывать режим в панели"
+  },
+  "Show a short label next to the monitor icon. Disable it to keep the bar compact.": {
+    "Show a short label next to the monitor icon. Disable it to keep the bar compact.": "Показывать короткую подпись рядом со значком монитора. Отключите, чтобы панель была компактнее."
+  },
+  "Add the widget to the bar or Control Center from the DMS settings. The picker is also available as the \"mon\" launcher trigger and through dms ipc call displayModes.": {
+    "Add the widget to the bar or Control Center from the DMS settings. The picker is also available as the \"mon\" launcher trigger and through dms ipc call displayModes.": "Добавьте виджет в панель или Пункт управления в настройках DMS. Меню также доступно по триггеру \"mon\" в лаунчере и через dms ipc call displayModes."
+  },
+  "Niri is required": {
+    "Niri is required": "Нужен niri"
+  },
+  "Display Modes uses niri's output commands. Hyprland and other compositors are not supported yet.": {
+    "Display Modes uses niri's output commands. Hyprland and other compositors are not supported yet.": "Плагин использует команды вывода niri. Hyprland и другие композиторы пока не поддерживаются."
+  },
+  "Missing dependencies": {
+    "Missing dependencies": "Не хватает зависимостей"
+  },
+  "Install niri, jq and bash, then enable the plugin again.": {
+    "Install niri, jq and bash, then enable the plugin again.": "Установите niri, jq и bash, затем включите плагин снова."
+  }
+}

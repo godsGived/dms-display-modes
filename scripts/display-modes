@@ -1,0 +1,475 @@
+#!/usr/bin/env bash
+# Display Modes for Dux Shell (DMS) — niri backend.
+#
+# Modes:
+#   menu      show a Win+P-style picker (DMS launcher, fuzzel fallback)
+#   internal  keep only the built-in laptop display
+#   external  keep only an external monitor
+#   extend    extended desktop across all connected monitors
+#   cycle     internal -> external -> extend -> internal ...
+#   current   print the current mode (internal|external|extend|off)
+#   status    human-readable status
+#
+# The extended layout is remembered when switching to a single-monitor mode.
+
+set -uo pipefail
+
+STATE_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/dms-display-modes"
+STATE_FILE="$STATE_DIR/layout.json"
+OLD_STATE="${XDG_STATE_HOME:-$HOME/.local/state}/display-switch/layout.json"
+NOTIFY="${DISPLAY_MODES_NOTIFY:-1}"
+LOCALE_STR="${LC_ALL:-${LC_MESSAGES:-${LANG:-}}}"
+
+err() { printf 'display-modes: %s\n' "$*" >&2; }
+
+is_ru() {
+    case "$LOCALE_STR" in
+        ru*|*_RU*|*_ru*) return 0 ;;
+    esac
+    return 1
+}
+
+t() {
+    if is_ru; then
+        case "$1" in
+            "Laptop only")      printf '%s' "Только ноутбук" ;;
+            "External only")    printf '%s' "Только внешний" ;;
+            "Extended")         printf '%s' "Расширенный" ;;
+            "all monitors")     printf '%s' "все мониторы" ;;
+            "Display mode")     printf '%s' "Режим мониторов" ;;
+            "Could not switch") printf '%s' "Не удалось переключить режим" ;;
+            *)                  printf '%s' "$1" ;;
+        esac
+    else
+        printf '%s' "$1"
+    fi
+}
+
+outputs_json() { niri msg -j outputs 2>/dev/null; }
+
+internal_output() {
+    outputs_json | jq -r 'keys[]' | grep -Eim1 '^(eDP|LVDS|DSI)' || true
+}
+
+external_outputs() {
+    local internal
+    internal=$(internal_output)
+    outputs_json | jq -r 'keys[]' | while IFS= read -r name; do
+        [ "$name" = "$internal" ] || printf '%s\n' "$name"
+    done
+}
+
+all_outputs() { outputs_json | jq -r 'keys[]'; }
+
+active_outputs() {
+    outputs_json | jq -r 'to_entries[] | select(.value.logical != null) | .key'
+}
+
+active_count() {
+    outputs_json | jq '[.[] | select(.logical != null)] | length'
+}
+
+is_active() {
+    local name="$1"
+    outputs_json | jq -e --arg n "$name" '.[$n].logical != null' >/dev/null 2>&1
+}
+
+notify() {
+    [ "$NOTIFY" = "1" ] || return 0
+    if command -v dms >/dev/null 2>&1; then
+        dms notify -t 1600 -a "Display Modes" -i video-display "$1" >/dev/null 2>&1 && return 0
+    fi
+    command -v notify-send >/dev/null 2>&1 &&
+        notify-send -t 1600 -a "Display Modes" -i video-display "$1" >/dev/null 2>&1
+    return 0
+}
+
+wait_active() {
+    local want="$1" i
+    for i in {1..30}; do
+        (( $(active_count) >= want )) && return 0
+        sleep 0.1
+    done
+    return 1
+}
+
+migrate_state() {
+    if [ ! -s "$STATE_FILE" ] && [ -s "$OLD_STATE" ]; then
+        mkdir -p "$STATE_DIR"
+        cp "$OLD_STATE" "$STATE_FILE" 2>/dev/null || true
+    fi
+}
+
+save_layout() {
+    local json count
+    migrate_state
+    json=$(outputs_json)
+    count=$(jq '[.[] | select(.logical != null)] | length' <<<"$json")
+    (( count >= 2 )) || return 0
+
+    mkdir -p "$STATE_DIR"
+    jq '[ to_entries[]
+          | select(.value.logical != null)
+          | .value as $o
+          | {
+              name: .key,
+              mode: (if $o.current_mode != null and $o.modes[$o.current_mode] != null
+                     then "\($o.modes[$o.current_mode].width)x\($o.modes[$o.current_mode].height)@\($o.modes[$o.current_mode].refresh_rate / 1000)"
+                     else null end),
+              scale: $o.logical.scale,
+              x: $o.logical.x,
+              y: $o.logical.y,
+              transform: ($o.logical.transform | ascii_downcase),
+              vrr: $o.vrr_enabled
+            }
+        ]' <<<"$json" > "$STATE_FILE.tmp" && mv "$STATE_FILE.tmp" "$STATE_FILE"
+}
+
+ensure_on() {
+    local name="$1"
+    is_active "$name" || niri msg output "$name" on >/dev/null 2>&1 || true
+}
+
+set_pos() {
+    niri msg output "$1" position set "$2" "$3" >/dev/null 2>&1 || true
+}
+
+set_mode_scale() {
+    local name="$1" mode="$2" scale="$3" transform="$4"
+    [ -n "$mode" ] && [ "$mode" != "null" ] &&
+        niri msg output "$name" mode "$mode" >/dev/null 2>&1 || true
+    [ -n "$scale" ] && [ "$scale" != "null" ] &&
+        niri msg output "$name" scale "$scale" >/dev/null 2>&1 || true
+    case "$transform" in
+        normal|90|180|270|flipped|flipped-90|flipped-180|flipped-270)
+            niri msg output "$name" transform "$transform" >/dev/null 2>&1 || true ;;
+    esac
+}
+
+# niri refuses a position that overlaps another output and silently
+# auto-places instead. Park every active output far to the right first.
+stage_outputs() {
+    local -a names
+    local cursor maxright name w
+
+    mapfile -t names < <(active_outputs)
+    (( ${#names[@]} >= 2 )) || return 0
+
+    maxright=$(outputs_json | jq '[.[] | select(.logical != null) | (.logical.x + .logical.width)] | max // 0')
+    cursor=$(( maxright + 1000 ))
+    for name in "${names[@]}"; do
+        w=$(outputs_json | jq -r --arg n "$name" '.[$n].logical.width // 0')
+        set_pos "$name" "$cursor" 0
+        cursor=$(( cursor + w + 1000 ))
+    done
+    sleep 0.3
+}
+
+apply_positions() {
+    local -a targets=("$@")
+    local attempt t name x y actual ok=1
+
+    (( ${#targets[@]} )) || return 0
+    for attempt in {1..8}; do
+        for t in "${targets[@]}"; do
+            IFS='|' read -r name x y <<<"$t"
+            set_pos "$name" "$x" "$y"
+        done
+        sleep 0.2
+        ok=1
+        for t in "${targets[@]}"; do
+            IFS='|' read -r name x y <<<"$t"
+            actual=$(outputs_json | jq -r --arg n "$name" \
+                '.[$n].logical | if . == null then "off" else "\(.x) \(.y)" end')
+            if [ "$actual" != "$x $y" ]; then
+                ok=0
+                break
+            fi
+        done
+        (( ok )) && return 0
+    done
+    return 1
+}
+
+# niri rounds logical sizes up, so leave a one-pixel gap.
+normalize_targets() {
+    local n=${#TARGETS[@]} i j pass moved
+    local -a names xs ys ws hs
+    local name x y w h
+
+    (( n >= 2 )) || return 0
+    for ((i = 0; i < n; i++)); do
+        IFS='|' read -r name x y <<<"${TARGETS[i]}"
+        names[i]=$name
+        xs[i]=$x
+        ys[i]=$y
+        read -r w h < <(outputs_json | jq -r --arg n "$name" \
+            '.[$n].logical | "\(.width) \(.height)"')
+        ws[i]=$(( w + 1 ))
+        hs[i]=$h
+    done
+
+    for pass in {1..200}; do
+        moved=0
+        for ((i = 0; i < n; i++)); do
+            for ((j = 0; j < n; j++)); do
+                (( i == j )) && continue
+                if (( xs[i] < xs[j] + ws[j] && xs[j] < xs[i] + ws[i] &&
+                      ys[i] < ys[j] + hs[j] && ys[j] < ys[i] + hs[i] )); then
+                    if (( xs[j] > xs[i] || (xs[j] == xs[i] && j > i) )); then
+                        xs[j]=$(( xs[i] + ws[i] ))
+                    else
+                        xs[i]=$(( xs[j] + ws[j] ))
+                    fi
+                    moved=1
+                fi
+            done
+        done
+        (( moved )) || break
+    done
+
+    TARGETS=()
+    for ((i = 0; i < n; i++)); do
+        TARGETS+=("${names[i]}|${xs[i]}|${ys[i]}")
+    done
+}
+
+build_targets() {
+    local -A sx=() sy=()
+    local name x y cursor=0 w
+    local -a ordered=()
+    local internal
+    TARGETS=()
+
+    migrate_state
+    if [ -s "$STATE_FILE" ]; then
+        while IFS=$'\t' read -r name x y; do
+            sx["$name"]=$x
+            sy["$name"]=$y
+        done < <(jq -r '.[] | "\(.name)\t\(.x)\t\(.y)"' "$STATE_FILE")
+    fi
+
+    internal=$(internal_output)
+    [ -n "$internal" ] && ordered+=("$internal")
+    while IFS= read -r name; do
+        [ -n "$name" ] && ordered+=("$name")
+    done < <(external_outputs)
+
+    for name in "${ordered[@]}"; do
+        if [ -n "${sx[$name]+x}" ]; then
+            x=${sx[$name]}
+            y=${sy[$name]}
+        else
+            x=$cursor
+            y=0
+        fi
+        TARGETS+=("$name|$x|$y")
+        w=$(outputs_json | jq -r --arg n "$name" '.[$n].logical.width // 0')
+        (( x + w + 1 > cursor )) && cursor=$(( x + w + 1 ))
+    done
+
+    normalize_targets
+}
+
+current_mode() {
+    local internal active
+    internal=$(internal_output)
+    active=$(active_count)
+    if (( active >= 2 )); then
+        printf '%s\n' "extend"
+    elif (( active == 1 )); then
+        if [ -n "$internal" ] && is_active "$internal"; then
+            printf '%s\n' "internal"
+        else
+            printf '%s\n' "external"
+        fi
+    else
+        printf '%s\n' "off"
+    fi
+}
+
+mode_single() {
+    local target="$1" label="$2" name
+
+    if ! all_outputs | grep -qxF "$target"; then
+        err "output '$target' not found"
+        return 1
+    fi
+
+    save_layout
+
+    ensure_on "$target"
+    wait_active 1 || true
+    sleep 0.2
+
+    while IFS= read -r name; do
+        [ "$name" = "$target" ] && continue
+        niri msg output "$name" off >/dev/null 2>&1 || true
+    done <<<"$(all_outputs)"
+
+    sleep 0.3
+    apply_positions "$target|0|0" || err "could not place '$target' at 0,0"
+
+    notify "${label:-$target}"
+    return 0
+}
+
+mode_extend() {
+    local name entry connected_count
+    local -a connected=()
+
+    mapfile -t connected < <(all_outputs)
+    connected_count=${#connected[@]}
+    for name in "${connected[@]}"; do
+        ensure_on "$name"
+    done
+    wait_active "$connected_count" || true
+    sleep 0.3
+
+    migrate_state
+    if [ -s "$STATE_FILE" ]; then
+        while IFS= read -r entry; do
+            name=$(jq -r '.name' <<<"$entry")
+            all_outputs | grep -qxF "$name" || continue
+            set_mode_scale "$name" \
+                "$(jq -r '.mode // empty' <<<"$entry")" \
+                "$(jq -r '.scale // empty' <<<"$entry")" \
+                "$(jq -r '.transform // "normal"' <<<"$entry")"
+        done < <(jq -c '.[]' "$STATE_FILE")
+        sleep 0.6
+        wait_active "$connected_count" || true
+    fi
+
+    stage_outputs
+    build_targets
+    apply_positions "${TARGETS[@]}" || err "could not apply the layout"
+    sleep 0.1
+
+    notify "$(t 'Extended')"
+    return 0
+}
+
+mode_cycle() {
+    local internal external active
+    internal=$(internal_output)
+    external=$(external_outputs | head -n1)
+    active=$(active_count)
+
+    if (( active >= 2 )); then
+        if [ -n "$internal" ]; then
+            mode_single "$internal" "$(t 'Laptop only')"
+        else
+            mode_single "$external" "$(t 'External only')"
+        fi
+    elif [ -n "$internal" ] && is_active "$internal" && [ -n "$external" ]; then
+        mode_single "$external" "$(t 'External only')"
+    else
+        mode_extend
+    fi
+}
+
+menu() {
+    local internal name choice rc current active_external
+    local -a items=()
+    internal=$(internal_output)
+    current=$(current_mode)
+    active_external=""
+
+    # Only one picker at a time; repeated key presses should not queue up.
+    mkdir -p "$STATE_DIR"
+    if command -v flock >/dev/null 2>&1; then
+        exec 9>"$STATE_DIR/menu.lock"
+        flock -n 9 || return 0
+    fi
+
+    if [ "$current" = "external" ]; then
+        active_external=$(active_outputs | while IFS= read -r name; do
+            [ "$name" = "$internal" ] || { printf '%s\n' "$name"; break; }
+        done)
+    fi
+
+    if [ -n "$internal" ]; then
+        local label
+        label="$(t 'Laptop only') — $internal"
+        [ "$current" = "internal" ] && label="$label  ✓"
+        items+=("$label")
+    fi
+    while IFS= read -r name; do
+        [ -z "$name" ] && continue
+        local label
+        label="$(t 'External only') — $name"
+        [ "$current" = "external" ] && [ "$name" = "$active_external" ] && label="$label  ✓"
+        items+=("$label")
+    done <<<"$(external_outputs)"
+
+    local ext_label
+    ext_label="$(t 'Extended') — $(t 'all monitors')"
+    [ "$current" = "extend" ] && ext_label="$ext_label  ✓"
+    items+=("$ext_label")
+
+    if command -v dms >/dev/null 2>&1; then
+        choice=$(printf '%s\n' "${items[@]}" |
+            dms dmenu -p "$(t 'Display mode')" --icon monitor 2>/dev/null)
+        rc=$?
+        if (( rc == 2 )); then
+            choice=$(printf '%s\n' "${items[@]}" |
+                fuzzel --dmenu -p "$(t 'Display mode'): " 2>/dev/null)
+            rc=$?
+        fi
+    elif command -v fuzzel >/dev/null 2>&1; then
+        choice=$(printf '%s\n' "${items[@]}" |
+            fuzzel --dmenu -p "$(t 'Display mode'): " 2>/dev/null)
+        rc=$?
+    else
+        err "neither dms nor fuzzel is available"
+        return 1
+    fi
+
+    (( rc == 0 )) && [ -n "$choice" ] || return 0
+
+    case "$choice" in
+        "Laptop only"*|"Только ноутбук"*)
+            [ -n "$internal" ] && mode_single "$internal" "$(t 'Laptop only')" ;;
+        "External only"*|"Только внешний"*)
+            local target="${choice##*— }"
+            target="${target%% *}"
+            [ -n "$target" ] && mode_single "$target" "$(t 'External only')" ;;
+        "Extended"*|"Расширенный"*)
+            mode_extend ;;
+    esac
+}
+
+status() {
+    printf 'Mode: %s\n' "$(current_mode)"
+    printf 'Internal: %s\n' "$(internal_output)"
+    printf 'External: %s\n' "$(external_outputs | paste -sd ', ' -)"
+    outputs_json | jq -r 'to_entries[] | "\(.key): " +
+        (if .value.logical == null then "off"
+         else "\(.value.logical.width)x\(.value.logical.height) @ \(.value.logical.scale)x at \(.value.logical.x),\(.value.logical.y)"
+         end)'
+}
+
+case "${1:-menu}" in
+    current)  current_mode ;;
+    status)   status ;;
+    menu)     menu ;;
+    internal|laptop)
+        internal=$(internal_output)
+        [ -n "$internal" ] || { err "no built-in display found"; exit 1; }
+        mode_single "$internal" "$(t 'Laptop only')" ;;
+    external)
+        external=$(external_outputs | head -n1)
+        [ -n "$external" ] || { err "no external monitor found"; exit 1; }
+        mode_single "$external" "$(t 'External only')" ;;
+    extend|both) mode_extend ;;
+    cycle)    mode_cycle ;;
+    -h|--help|help)
+        cat <<'EOF'
+Usage: display-modes [menu|internal|external|extend|cycle|current|status]
+EOF
+        ;;
+    *)
+        err "unknown mode '$1'"
+        exit 2
+        ;;
+esac

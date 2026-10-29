@@ -1,0 +1,36 @@
+{
+  "$schema": "https://raw.githubusercontent.com/duxlabs-dev/dux-shell/master/quickshell/PLUGINS/plugin-schema.json",
+  "id": "displayModes",
+  "name": "Display Modes",
+  "description": "Win+P-style monitor switcher for niri: laptop only, external only, or extended, with the extended layout remembered.",
+  "version": "1.0.0",
+  "author": "godsGived",
+  "license": "MIT",
+  "icon": "monitor",
+  "type": "composite",
+  "capabilities": [
+    "dankbar-widget",
+    "control-center",
+    "launcher",
+    "ipc"
+  ],
+  "components": {
+    "widget": "./DisplayModesWidget.qml",
+    "launcher": "./DisplayModesLauncher.qml",
+    "daemon": "./DisplayModesDaemon.qml"
+  },
+  "trigger": "mon",
+  "settings": "./DisplayModesSettings.qml",
+  "startupCheck": "./StartupCheck.qml",
+  "requires_dms": ">=2.0.0",
+  "dependencies": [
+    "niri",
+    "jq",
+    "bash"
+  ],
+  "permissions": [
+    "process",
+    "settings_read",
+    "settings_write"
+  ]
+}

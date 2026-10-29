@@ -1,0 +1,62 @@
+#!/usr/bin/env bash
+# Register the Display Modes picker as a DMS-managed keybind.
+# Usage: displaymodes-keybind <shortcut|""> [provider]
+# Empty shortcut removes the binding.
+
+set -u
+
+dms_bin="${DMS_BIN:-dms}"
+plugin_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+script="$plugin_dir/scripts/display-modes"
+action="spawn $script menu"
+new_key="${1:-}"
+provider="${2:-niri}"
+
+case "$script" in
+    *" "*)
+        printf 'Plugin path contains spaces; cannot register a keybind\n' >&2
+        exit 1
+        ;;
+esac
+
+case "$new_key" in
+    *[!A-Za-z0-9+_-]*)
+        printf 'Shortcut contains unsupported characters\n' >&2
+        exit 1
+        ;;
+esac
+
+case "$provider" in
+    niri|hyprland|mangowc) ;;
+    *)
+        printf 'Unsupported compositor keybind provider\n' >&2
+        exit 1
+        ;;
+esac
+
+binds="$("$dms_bin" keybinds show "$provider")" || {
+    printf 'Could not read compositor shortcuts\n' >&2
+    exit 1
+}
+
+current_key="$(printf '%s' "$binds" | jq -r --arg action "$action" \
+    '[.binds[][] | select(.action == $action) | .key][0] // empty')" || exit 1
+
+if [ -z "$new_key" ]; then
+    [ -z "$current_key" ] || "$dms_bin" keybinds remove "$provider" "$current_key"
+    exit $?
+fi
+
+conflicts="$(printf '%s' "$binds" | jq -r --arg key "$new_key" --arg action "$action" \
+    '[.binds[][] | select(.key == $key and .action != $action)] | length')" || exit 1
+[ "$conflicts" -eq 0 ] || {
+    printf 'Shortcut %s is already in use\n' "$new_key" >&2
+    exit 1
+}
+
+[ "$current_key" = "$new_key" ] && exit 0
+
+command=("$dms_bin" keybinds set "$provider" "$new_key" "$action" \
+    --desc "Display Modes" --no-repeat)
+[ -z "$current_key" ] || command+=(--replace-key "$current_key")
+"${command[@]}"
